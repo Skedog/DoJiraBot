@@ -156,8 +156,9 @@ async function start() {
 							const dataSplit = discordData.fieldText2.split(' ');
 							let usersToPing = '';
 							for (var i = numPings - 1; i >= 0; i--) {
-								const userID = dataSplit[i].replace('[~accountid:','').replace(']','');
-								const returnedUser = await findUser(userID);
+								const userID = dataSplit[i].replace('[~accountid:','');
+								const finalUserID = userID.split(']');
+								const returnedUser = await findUser(finalUserID[0]);
 								const userSplit = returnedUser.split(',');
 								usersToPing = usersToPing + '<@' + userSplit[1] + '> ';
 							};
