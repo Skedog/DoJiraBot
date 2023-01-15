@@ -24,6 +24,20 @@ async function findUser(userToFind) {
 	};
 }
 
+async function fixLinks(textToFix) {
+	if (textToFix) {
+		if (textToFix.includes('[https://')){
+			const links = (textToFix.match(/\[(.*?)\]/g) || []);
+			for (var x = 0; x < links.length; x++) {
+				const linkSplit = links[x].split('|');
+				const finalLink = linkSplit[0].replace('[','');
+				textToFix = textToFix.replace(links[x],finalLink);
+			}
+		}
+	}
+	return textToFix;
+}
+
 async function start() {
 	const app = express();
 	app.use(bodyParser.urlencoded({extended: true}));
@@ -58,7 +72,7 @@ async function start() {
 						discordData.fieldTitle1 = req.body.issue.fields.issuetype.name + ' Title';
 						discordData.fieldText1 = req.body.issue.fields.summary;
 						discordData.fieldTitle2 = req.body.issue.fields.issuetype.name + ' Description';
-						discordData.fieldText2 = req.body.issue.fields.description;
+						discordData.fieldText2 = await fixLinks(req.body.issue.fields.description);
 						discord.sendEmbedMessage(discordData);
 					}
 
@@ -69,7 +83,7 @@ async function start() {
 						discordData.fieldTitle1 = req.body.issue.fields.issuetype.name + ' Title';
 						discordData.fieldText1 = req.body.issue.fields.summary;
 						discordData.fieldTitle2 = req.body.issue.fields.issuetype.name + ' Description';
-						discordData.fieldText2 = req.body.issue.fields.description;
+						discordData.fieldText2 = await fixLinks(req.body.issue.fields.description);
 						// If the new issue has been assigned to someone, we need to ping that person on Discord
 						if (req.body.issue.fields.assignee) {
 							const issuedAssignedTo = req.body.issue.fields.assignee.displayName;
@@ -99,8 +113,8 @@ async function start() {
 								discordData.type = req.body.issue.fields.issuetype.name + ' Description Updated';
 								discordData.fieldTitle1 = 'Previous Description';
 								discordData.fieldTitle2 = 'New Description';
-								discordData.fieldText1 = changelogItem.fromString;
-								discordData.fieldText2 = changelogItem.toString;
+								discordData.fieldText1 = await fixLinks(changelogItem.fromString);
+								discordData.fieldText2 = await fixLinks(changelogItem.toString);
 								discordData.URLtoUse = config.baseJiraURL + '/browse/' + req.body.issue.key;
 								discord.sendEmbedMessage(discordData);
 							}
