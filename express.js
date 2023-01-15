@@ -143,10 +143,12 @@ async function start() {
 							if (changelogItem.field === 'priority') {
 								if (changelogItem.toString != null) {
 									discordData.type = req.body.issue.fields.issuetype.name + ' Priority Updated';
-									const returnedUser = await findUser(req.body.issue.fields.assignee.accountId);
-									const userSplit = returnedUser.split(',');
-									const userDiscordID = userSplit[1];
-									discord.sendChatMessage('<@' + userDiscordID + '>');
+									if (req.body.issue.fields.assignee) {
+										const returnedUser = await findUser(req.body.issue.fields.assignee.accountId);
+										const userSplit = returnedUser.split(',');
+										const userDiscordID = userSplit[1];
+										discord.sendChatMessage('<@' + userDiscordID + '>');
+									}
 									discordData.fieldTitle1 = 'Previous Priority';
 									discordData.fieldTitle2 = 'New Priority';
 									discordData.fieldText1 = changelogItem.fromString;
