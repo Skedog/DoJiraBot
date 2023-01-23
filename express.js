@@ -165,7 +165,7 @@ async function start() {
 						discordData.fieldTitle1 = req.body.issue.fields.issuetype.name + ' Title';
 						discordData.fieldText1 = req.body.issue.fields.summary;
 						discordData.fieldTitle2 = 'New Comment from ' + req.body.comment.updateAuthor.displayName;
-						discordData.fieldText2 = req.body.comment.body;
+						discordData.fieldText2 = await fixLinks(req.body.comment.body);
 						if (discordData.fieldText2.includes('[~accountid:')) {
 							// at least one person has been mentioned in this comment, we need to ping them on Discord
 							const numPings = (discordData.fieldText2.match(/accountid/g) || []).length;
