@@ -25,16 +25,36 @@ async function findUser(userToFind) {
 }
 
 async function fixLinks(textToFix) {
-	if (textToFix) {
-		if (textToFix.includes('[https://')){
-			const links = (textToFix.match(/\[(.*?)\]/g) || []);
-			for (var x = 0; x < links.length; x++) {
-				const linkSplit = links[x].split('|');
-				const finalLink = linkSplit[0].replace('[','');
-				textToFix = textToFix.replace(links[x],finalLink);
-			}
+	if (textToFix?.includes('[https://')){
+		const links = (textToFix.match(/\[(.*?)\]/g) || []);
+		for (var x = 0; x < links.length; x++) {
+			const linkSplit = links[x].split('|');
+			const finalLink = linkSplit[0].replace('[','');
+			textToFix = textToFix.replace(links[x],finalLink);
 		}
 	}
+	return textToFix;
+}
+
+async function pingUsersAndFixDescription(textToFix,shouldPingUsers) {
+	const userPings = textToFix.match(/[^[\]]+(?=])/g);
+	let usersToPing = '';
+	for (var i = userPings.length - 1; i >= 0; i--) {
+		const userID = userPings[i].replace('~accountid:','');
+		const returnedUser = await findUser(userID);
+		const userSplit = returnedUser.split(',');
+		const userPingsEnabled = userSplit[2];
+		if (userPingsEnabled == 'true' && shouldPingUsers) {
+			// No need to ping the same person twice
+			if (!usersToPing.includes(userSplit[1])) {
+				usersToPing = usersToPing + '<@' + userSplit[1] + '> ';
+			}
+		}
+		textToFix = textToFix.replace('[~accountid:' + userID + ']','<@' + userSplit[1] + '>')
+	};
+	if (usersToPing) {
+		discord.sendChatMessage(usersToPing);
+	};
 	return textToFix;
 }
 
@@ -84,13 +104,21 @@ async function start() {
 						discordData.fieldText1 = req.body.issue.fields.summary;
 						discordData.fieldTitle2 = req.body.issue.fields.issuetype.name + ' Description';
 						discordData.fieldText2 = await fixLinks(req.body.issue.fields.description);
+						if (discordData.fieldText2?.includes('[~accountid:')) {
+							// at least one person has been mentioned in the description, we need to possibly ping them on Discord
+							discordData.fieldText2 = await pingUsersAndFixDescription(discordData.fieldText2, true);
+						}
+
 						// If the new issue has been assigned to someone, we need to ping that person on Discord
 						if (req.body.issue.fields.assignee) {
 							const issuedAssignedTo = req.body.issue.fields.assignee.displayName;
 							const returnedUser = await findUser(issuedAssignedTo);
 							const userSplit = returnedUser.split(',');
 							const userDiscordID = userSplit[1];
-							discord.sendChatMessage('<@' + userDiscordID + '>');
+							const userPingsEnabled = userSplit[2];
+							if (userPingsEnabled) {
+								discord.sendChatMessage('<@' + userDiscordID + '>');
+							}
 						}
 						discord.sendEmbedMessage(discordData);
 					}
@@ -114,7 +142,15 @@ async function start() {
 								discordData.fieldTitle1 = 'Previous Description';
 								discordData.fieldTitle2 = 'New Description';
 								discordData.fieldText1 = await fixLinks(changelogItem.fromString);
+								if (discordData.fieldText1?.includes('[~accountid:')) {
+									// Someone was mentioned before and the description was updated now but we don't want to ping users based on the previous description
+									discordData.fieldText1 = await pingUsersAndFixDescription(discordData.fieldText1, false);
+								}
 								discordData.fieldText2 = await fixLinks(changelogItem.toString);
+								if (discordData.fieldText2?.includes('[~accountid:')) {
+									// at least one person has been mentioned in the description, we need to possibly ping them on Discord
+									discordData.fieldText2 = await pingUsersAndFixDescription(discordData.fieldText2, true);
+								}
 								discordData.URLtoUse = config.baseJiraURL + '/browse/' + req.body.issue.key;
 								discord.sendEmbedMessage(discordData);
 							}
@@ -133,7 +169,10 @@ async function start() {
 									const returnedUser = await findUser(changelogItem.to);
 									const userSplit = returnedUser.split(',');
 									const userDiscordID = userSplit[1];
-									discord.sendChatMessage('<@' + userDiscordID + '>');
+									const userPingsEnabled = userSplit[2];
+									if (userPingsEnabled) {
+										discord.sendChatMessage('<@' + userDiscordID + '>');
+									}
 									discordData.fieldTitle1 = 'Now Assigned To';
 									discordData.fieldText1 = changelogItem.toString;
 									discordData.URLtoUse = config.baseJiraURL + '/browse/' + req.body.issue.key;
@@ -147,7 +186,10 @@ async function start() {
 										const returnedUser = await findUser(req.body.issue.fields.assignee.accountId);
 										const userSplit = returnedUser.split(',');
 										const userDiscordID = userSplit[1];
-										discord.sendChatMessage('<@' + userDiscordID + '>');
+										const userPingsEnabled = userSplit[2];
+										if (userPingsEnabled) {
+											discord.sendChatMessage('<@' + userDiscordID + '>');
+										}
 									}
 									discordData.fieldTitle1 = 'Previous Priority';
 									discordData.fieldTitle2 = 'New Priority';
@@ -166,23 +208,9 @@ async function start() {
 						discordData.fieldText1 = req.body.issue.fields.summary;
 						discordData.fieldTitle2 = 'New Comment from ' + req.body.comment.updateAuthor.displayName;
 						discordData.fieldText2 = await fixLinks(req.body.comment.body);
-						if (discordData.fieldText2.includes('[~accountid:')) {
-							// at least one person has been mentioned in this comment, we need to ping them on Discord
-							const numPings = (discordData.fieldText2.match(/accountid/g) || []).length;
-							const dataSplit = discordData.fieldText2.split(' ');
-							let usersToPing = '';
-							for (var i = numPings - 1; i >= 0; i--) {
-								const userID = dataSplit[i].replace('[~accountid:','');
-								const finalUserID = userID.split(']');
-								const returnedUser = await findUser(finalUserID[0]);
-								const userSplit = returnedUser.split(',');
-								usersToPing = usersToPing + '<@' + userSplit[1] + '> ';
-							};
-							if (usersToPing) {
-								discord.sendChatMessage(usersToPing);
-							};
-							dataSplit.splice(0,numPings);
-							discordData.fieldText2 = usersToPing + ' ' + dataSplit.join(' ');
+						if (discordData.fieldText2?.includes('[~accountid:')) {
+							// at least one person has been mentioned in this comment, we need to possibly ping them on Discord
+							discordData.fieldText2 = await pingUsersAndFixDescription(discordData.fieldText2, true);
 						}
 						discordData.URLtoUse = config.baseJiraURL + '/browse/' + req.body.issue.key + '?focusedCommentId=' + req.body.comment.id;
 						discord.sendEmbedMessage(discordData);
